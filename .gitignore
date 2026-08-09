@@ -69,9 +69,15 @@ fastlane/test_output
 .claude
 .cursor
 .claude.globals
+.codex
 
 # OS
 .DS_Store
 
 # Build files
 *.dmg
+
+# Dev
+docs/pocket/**
+AGENTS.md
+CLAUDE.md
