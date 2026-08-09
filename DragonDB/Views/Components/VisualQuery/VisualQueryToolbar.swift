@@ -27,7 +27,7 @@ struct VisualQueryToolbar: View {
             }
             .buttonStyle(.glass)
             .clipShape(Capsule())
-            .tint(.green)
+            .tint(.dragonPrimary600)
             .disabled(!runEnabled || isRunning)
             .help(runHelpMessage ?? "")
             .accessibilityIdentifier(VisualQueryAccessibility.runQuery)

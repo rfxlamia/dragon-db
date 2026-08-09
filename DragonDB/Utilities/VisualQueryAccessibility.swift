@@ -18,17 +18,23 @@ enum VisualQueryAccessibility {
     static let viewGeneratedSQL = "visualQuery.viewGeneratedSQL"
     static let generatedSQLText = "visualQuery.generatedSQLText"
     static let copySQL = "visualQuery.copySQL"
+    static let generatedSQLDone = "visualQuery.generatedSQLDone"
     static let allColumnsToggle = "visualQuery.allColumnsToggle"
     static let selectColumnsField = "visualQuery.selectColumnsField"
+    static let selectColumnsPicker = "visualQuery.selectColumnsPicker"
     static let fromTableField = "visualQuery.fromTableField"
+    static let fromTablePicker = "visualQuery.fromTablePicker"
     static let whereColumnField = "visualQuery.whereColumnField"
+    static let whereColumnPicker = "visualQuery.whereColumnPicker"
     static let whereOperatorField = "visualQuery.whereOperatorField"
     static let whereValueField = "visualQuery.whereValueField"
     static let orderByColumnField = "visualQuery.orderByColumnField"
+    static let orderByColumnPicker = "visualQuery.orderByColumnPicker"
     static let orderByDirectionField = "visualQuery.orderByDirectionField"
     static let limitField = "visualQuery.limitField"
     static let createTableNameField = "visualQuery.createTableNameField"
     static let createColumnsList = "visualQuery.createColumnsList"
+    static let addCreateColumn = "visualQuery.addCreateColumn"
     static let schemaPopoverSearch = "visualQuery.schemaPopoverSearch"
     static let schemaPopoverList = "visualQuery.schemaPopoverList"
     static let confirmCreateContinue = "visualQuery.confirmCreateContinue"
@@ -54,6 +60,22 @@ enum VisualQueryAccessibility {
         "visualQuery.deleteRoot.\(statementKey(kind))"
     }
 
+    static func createColumnNameField(_ index: Int) -> String {
+        "visualQuery.createColumn.\(index).name"
+    }
+
+    static func createColumnTypePicker(_ index: Int) -> String {
+        "visualQuery.createColumn.\(index).type"
+    }
+
+    static func removeCreateColumn(_ index: Int) -> String {
+        "visualQuery.createColumn.\(index).remove"
+    }
+
+    static func schemaPopoverItem(title: String, item: String) -> String {
+        "visualQuery.schemaPopover.\(title.lowercased()).item.\(item)"
+    }
+
     /// Every interactive identifier used by the canvas — must stay unique.
     static var allInteractiveIdentifiers: [String] {
         var ids: [String] = [
@@ -67,17 +89,23 @@ enum VisualQueryAccessibility {
             viewGeneratedSQL,
             generatedSQLText,
             copySQL,
+            generatedSQLDone,
             allColumnsToggle,
             selectColumnsField,
+            selectColumnsPicker,
             fromTableField,
+            fromTablePicker,
             whereColumnField,
+            whereColumnPicker,
             whereOperatorField,
             whereValueField,
             orderByColumnField,
+            orderByColumnPicker,
             orderByDirectionField,
             limitField,
             createTableNameField,
             createColumnsList,
+            addCreateColumn,
             schemaPopoverSearch,
             schemaPopoverList,
             confirmCreateContinue,

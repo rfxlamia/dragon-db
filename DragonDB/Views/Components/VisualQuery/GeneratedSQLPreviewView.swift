@@ -55,7 +55,3 @@ struct GeneratedSQLPreviewView: View {
         pasteboard.setString(preview.sql, forType: .string)
     }
 }
-
-extension VisualQueryAccessibility {
-    static let generatedSQLDone = "visualQuery.generatedSQLDone"
-}

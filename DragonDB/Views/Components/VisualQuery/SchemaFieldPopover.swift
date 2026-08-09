@@ -90,9 +90,3 @@ struct SchemaFieldPopover<Item: Hashable>: View {
         return needsFromMessage ?? errorMessage
     }
 }
-
-extension VisualQueryAccessibility {
-    static func schemaPopoverItem(title: String, item: String) -> String {
-        "visualQuery.schemaPopover.\(title.lowercased()).item.\(item)"
-    }
-}
