@@ -240,8 +240,10 @@ class QueryEditorViewModel {
                 }
             }
 
-            // Refresh tables list if query modified schema
-            if isSchemaModifyingQuery(queryText) {
+            // Visual CREATE refreshes once through QueryEditorView's context-guarded
+            // TableRefreshService callback after this shared execution completes.
+            let usesGuardedVisualRefresh = source == .visualBuilder && queryType == .createTable
+            if isSchemaModifyingQuery(queryText) && !usesGuardedVisualRefresh {
                 await refreshTables(database: database)
 
                 // Clear results if dropped table was the selected table

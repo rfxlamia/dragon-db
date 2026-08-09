@@ -41,8 +41,10 @@ private final class VisualQueryMockQueryService: QueryServiceProtocol {
 private final class VisualQueryMockDatabaseService: DatabaseServiceProtocol {
     var isConnected: Bool = true
     var connectedDatabase: String? = "analytics"
+    private(set) var fetchTablesCallCount = 0
     private(set) var fetchColumnInfoCallCount = 0
     private(set) var lastFetchedColumnTable: (schema: String, name: String)?
+    var tables: [TableInfo] = []
     var columnInfo: [ColumnInfo] = []
     var fetchColumnInfoError: Error?
 
@@ -73,7 +75,10 @@ private final class VisualQueryMockDatabaseService: DatabaseServiceProtocol {
     func fetchDatabases() async throws -> [DatabaseInfo] { [] }
     func createDatabase(name: String) async throws {}
     func deleteDatabase(name: String) async throws {}
-    func fetchTables(database: String) async throws -> [TableInfo] { [] }
+    func fetchTables(database: String) async throws -> [TableInfo] {
+        fetchTablesCallCount += 1
+        return tables
+    }
     func fetchSchemas(database: String) async throws -> [String] { [] }
     func deleteTable(schema: String, table: String) async throws {}
     func truncateTable(schema: String, table: String) async throws {}
@@ -136,6 +141,8 @@ private final class VisualQueryEditorHarness {
     let tabManager: TabManager
     let tab: TabViewModel
     let service: VisualQueryMockQueryService
+    let databaseService: VisualQueryMockDatabaseService
+    let tableRefreshService: VisualQueryMockTableRefreshService
     let editorViewModel: QueryEditorViewModel
     let modelContext: ModelContext
     /// Must retain the container for the lifetime of `modelContext` or SwiftData traps on insert.
@@ -147,7 +154,8 @@ private final class VisualQueryEditorHarness {
         let service = VisualQueryMockQueryService()
         service.result = result
 
-        let connectionState = ConnectionState(databaseService: DelayedMockDatabaseService())
+        let databaseService = VisualQueryMockDatabaseService()
+        let connectionState = ConnectionState(databaseService: databaseService)
         connectionState.currentConnection = ConnectionProfile(
             name: "Local",
             host: "localhost",
@@ -157,6 +165,7 @@ private final class VisualQueryEditorHarness {
         connectionState.selectedDatabase = DatabaseInfo(name: "analytics")
 
         let appState = AppState(connection: connectionState, query: QueryState())
+        let tableRefreshService = VisualQueryMockTableRefreshService()
         let tab = TabViewModel(isActive: true)
         let tabManager = TabManager()
         tabManager.activeTab = tab
@@ -174,6 +183,8 @@ private final class VisualQueryEditorHarness {
             tabManager: tabManager,
             tab: tab,
             service: service,
+            databaseService: databaseService,
+            tableRefreshService: tableRefreshService,
             editorViewModel: editorViewModel,
             modelContext: context,
             container: container
@@ -185,6 +196,8 @@ private final class VisualQueryEditorHarness {
         tabManager: TabManager,
         tab: TabViewModel,
         service: VisualQueryMockQueryService,
+        databaseService: VisualQueryMockDatabaseService,
+        tableRefreshService: VisualQueryMockTableRefreshService,
         editorViewModel: QueryEditorViewModel,
         modelContext: ModelContext,
         container: ModelContainer
@@ -193,6 +206,8 @@ private final class VisualQueryEditorHarness {
         self.tabManager = tabManager
         self.tab = tab
         self.service = service
+        self.databaseService = databaseService
+        self.tableRefreshService = tableRefreshService
         self.editorViewModel = editorViewModel
         self.modelContext = modelContext
         self.container = container
@@ -200,13 +215,22 @@ private final class VisualQueryEditorHarness {
 
     func makeVisualViewModel() -> VisualQueryViewModel {
         let editor = editorViewModel
+        let refresher = VisualQueryTableRefresher(service: tableRefreshService)
         return VisualQueryViewModel(
             document: tab.visualQueryDocument,
             onDocumentChange: { [tab] in tab.visualQueryDocument = $0 },
             isConnected: { true },
-            databaseName: { "analytics" },
+            databaseName: { [appState] in
+                appState.connection.selectedDatabase?.name ?? ""
+            },
+            tableRefreshContext: { [appState] in
+                refresher.captureContext(from: appState.connection)
+            },
             executeSQL: { sql in
                 await editor.executeQuery(sql: sql, source: .visualBuilder)
+            },
+            onTablesRefresh: { [appState] context in
+                await refresher.refreshTables(ifCurrent: context, appState: appState)
             }
         )
     }
@@ -354,34 +378,16 @@ struct VisualQueryRunIntegrationTests {
         #expect(presentation.visibleStatusMessage == "Created table notes in analytics")
     }
 
-    @Test func createDatabaseSwitchDuringExecutionSkipsTableRefreshService() async {
-        let databaseService = VisualQueryMockDatabaseService()
-        let connectionState = ConnectionState(databaseService: databaseService)
-        connectionState.currentConnection = ConnectionProfile(
-            name: "Local",
-            host: "localhost",
-            username: "postgres",
-            database: "analytics"
+    @Test func visualCreateDatabaseSwitchSkipsEveryTableRefreshPath() async throws {
+        let harness = try VisualQueryEditorHarness.make(
+            result: .success(rows: [], columnNames: [], executionTime: 0.01)
         )
-        connectionState.selectedDatabase = DatabaseInfo(name: "analytics")
-        let appState = AppState(connection: connectionState, query: QueryState())
-        let refreshService = VisualQueryMockTableRefreshService()
-        let refresher = VisualQueryTableRefresher(service: refreshService)
-        let vm = VisualQueryViewModel(
-            isConnected: { true },
-            databaseName: { appState.connection.selectedDatabase?.name ?? "" },
-            tableRefreshContext: {
-                refresher.captureContext(from: appState.connection)
-            },
-            executeSQL: { _ in
-                await Task.yield()
-                appState.connection.selectedDatabase = DatabaseInfo(name: "reporting")
-                return .success(rows: [], columnNames: [], executionTime: 0.01)
-            },
-            onTablesRefresh: { context in
-                await refresher.refreshTables(ifCurrent: context, appState: appState)
-            }
-        )
+        let vm = harness.makeVisualViewModel()
+        harness.databaseService.tables = [TableInfo(name: "notes")]
+        harness.service.onExecute = {
+            harness.appState.connection.selectedDatabase = DatabaseInfo(name: "reporting")
+            harness.appState.connection.tables = [TableInfo(name: "reporting_snapshot")]
+        }
         _ = vm.chooseStatement(.createTable)
         vm.setCreateTableName("notes")
         vm.setCreateColumns([VisualCreateColumn(name: "body", type: .text)])
@@ -389,42 +395,26 @@ struct VisualQueryRunIntegrationTests {
         await vm.runQuery()
         await vm.confirmCreateAndExecute()
 
-        #expect(refreshService.loadTablesCallCount == 0)
+        #expect(harness.databaseService.fetchTablesCallCount == 0)
+        #expect(harness.tableRefreshService.loadTablesCallCount == 0)
+        #expect(harness.appState.connection.tables.map(\.name) == ["reporting_snapshot"])
     }
 
-    @Test func createConnectionSwitchDuringExecutionSkipsTableRefreshService() async {
-        let databaseService = VisualQueryMockDatabaseService()
-        let connectionState = ConnectionState(databaseService: databaseService)
-        connectionState.currentConnection = ConnectionProfile(
-            name: "Local",
-            host: "localhost",
-            username: "postgres",
-            database: "analytics"
+    @Test func visualCreateConnectionSwitchSkipsEveryTableRefreshPath() async throws {
+        let harness = try VisualQueryEditorHarness.make(
+            result: .success(rows: [], columnNames: [], executionTime: 0.01)
         )
-        connectionState.selectedDatabase = DatabaseInfo(name: "analytics")
-        let appState = AppState(connection: connectionState, query: QueryState())
-        let refreshService = VisualQueryMockTableRefreshService()
-        let refresher = VisualQueryTableRefresher(service: refreshService)
-        let vm = VisualQueryViewModel(
-            isConnected: { true },
-            databaseName: { appState.connection.selectedDatabase?.name ?? "" },
-            tableRefreshContext: {
-                refresher.captureContext(from: appState.connection)
-            },
-            executeSQL: { _ in
-                await Task.yield()
-                appState.connection.currentConnection = ConnectionProfile(
-                    name: "Remote",
-                    host: "db.example.com",
-                    username: "postgres",
-                    database: "analytics"
-                )
-                return .success(rows: [], columnNames: [], executionTime: 0.01)
-            },
-            onTablesRefresh: { context in
-                await refresher.refreshTables(ifCurrent: context, appState: appState)
-            }
-        )
+        let vm = harness.makeVisualViewModel()
+        harness.databaseService.tables = [TableInfo(name: "notes")]
+        harness.service.onExecute = {
+            harness.appState.connection.currentConnection = ConnectionProfile(
+                name: "Remote",
+                host: "db.example.com",
+                username: "postgres",
+                database: "analytics"
+            )
+            harness.appState.connection.tables = [TableInfo(name: "remote_snapshot")]
+        }
         _ = vm.chooseStatement(.createTable)
         vm.setCreateTableName("notes")
         vm.setCreateColumns([VisualCreateColumn(name: "body", type: .text)])
@@ -432,7 +422,25 @@ struct VisualQueryRunIntegrationTests {
         await vm.runQuery()
         await vm.confirmCreateAndExecute()
 
-        #expect(refreshService.loadTablesCallCount == 0)
+        #expect(harness.databaseService.fetchTablesCallCount == 0)
+        #expect(harness.tableRefreshService.loadTablesCallCount == 0)
+        #expect(harness.appState.connection.tables.map(\.name) == ["remote_snapshot"])
+    }
+
+    @Test func visualCreateUnchangedContextUsesGuardedTableRefreshService() async throws {
+        let harness = try VisualQueryEditorHarness.make(
+            result: .success(rows: [], columnNames: [], executionTime: 0.01)
+        )
+        let vm = harness.makeVisualViewModel()
+        _ = vm.chooseStatement(.createTable)
+        vm.setCreateTableName("notes")
+        vm.setCreateColumns([VisualCreateColumn(name: "body", type: .text)])
+
+        await vm.runQuery()
+        await vm.confirmCreateAndExecute()
+
+        #expect(harness.databaseService.fetchTablesCallCount == 0)
+        #expect(harness.tableRefreshService.loadTablesCallCount == 1)
     }
 
     @Test func metadataFailureAllowsManualFromAndDoesNotBlockRun() async {
