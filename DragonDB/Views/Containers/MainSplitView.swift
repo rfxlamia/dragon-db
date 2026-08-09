@@ -37,7 +37,24 @@ struct MainSplitView: View {
                 }
 
                 VSplitView {
-                    // Row 1: Query results
+                    // Row 1: Queries list + Query editor
+                    HSplitView {
+                        // Column 1: Saved queries list
+                        SavedQueriesSidebarSection(
+                            savedQueries: savedQueries,
+                            folders: queryFolders,
+                            selectedQueryIDs: $selectedQueryIDs
+                        )
+                        .frame(minWidth: 200, maxWidth: 260)
+
+                        // Column 2: Query editor
+                        QueryEditorView()
+                    }
+                    // Both panes are vertically greedy, so an explicit ideal height is
+                    // required to keep the editor from claiming half the window.
+                    .frame(minHeight: 250, idealHeight: 320)
+
+                    // Row 2: Query results
                     VStack(spacing: 0) {
                         if let viewModel = viewModel {
                             QueryResultsView(
@@ -54,21 +71,6 @@ struct MainSplitView: View {
                         }
                     }
                     .frame(minHeight: 300)
-
-                    // Row 2: Queries list + Query editor
-                    HSplitView {
-                        // Column 1: Saved queries list
-                        SavedQueriesSidebarSection(
-                            savedQueries: savedQueries,
-                            folders: queryFolders,
-                            selectedQueryIDs: $selectedQueryIDs
-                        )
-                        .frame(minWidth: 200, maxWidth: 260)
-
-                        // Column 2: Query editor
-                        QueryEditorView()
-                    }
-                    .frame(minHeight: 250)
                 }
             }
             .toolbar {
