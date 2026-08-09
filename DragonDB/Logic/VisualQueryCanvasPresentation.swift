@@ -3,13 +3,25 @@
 //  DragonDB
 //
 //  Presentation contract consumed by the SwiftUI visual query canvas.
-//  Derives visible cards and trailing + options from the document only.
+//  Derives visible cards, trailing + options, and visible execution status.
 //
 
 import Foundation
 
 struct VisualQueryCanvasPresentation: Equatable, Sendable {
     let document: VisualQueryDocument
+    let statusMessage: String?
+
+    init(document: VisualQueryDocument, statusMessage: String? = nil) {
+        self.document = document
+        self.statusMessage = statusMessage
+    }
+
+    var visibleStatusMessage: String? {
+        guard let statusMessage else { return nil }
+        let trimmed = statusMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 
     /// Clause cards currently on the canvas — mirrors document clauseKinds exactly.
     /// Pressing + never invents a full SELECT chain here.

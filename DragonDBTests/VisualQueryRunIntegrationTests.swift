@@ -16,10 +16,12 @@ private final class VisualQueryMockQueryService: QueryServiceProtocol {
     private(set) var executeCallCount = 0
     private(set) var executedSQL: [String] = []
     var result: QueryResult = .success(rows: [], columnNames: [], executionTime: 0.01)
+    var onExecute: (() -> Void)?
 
     func executeQuery(_ sql: String, preferredColumnOrder: [String]?) async -> QueryResult {
         executeCallCount += 1
         executedSQL.append(sql)
+        onExecute?()
         return result
     }
 
@@ -110,6 +112,21 @@ private final class VisualQueryMockDatabaseService: DatabaseServiceProtocol {
 private actor RefreshCallProbe {
     private(set) var count = 0
     func increment() { count += 1 }
+}
+
+@MainActor
+private final class VisualQueryMockTableRefreshService: TableRefreshServiceProtocol {
+    private(set) var loadTablesCallCount = 0
+
+    func loadTables(
+        for database: DatabaseInfo,
+        connection: ConnectionProfile,
+        appState: AppState
+    ) async {
+        loadTablesCallCount += 1
+    }
+
+    func refresh(appState: AppState) async {}
 }
 
 /// Harness that wires VisualQueryViewModel through the real QueryEditorViewModel pathway.
@@ -252,13 +269,20 @@ struct VisualQueryRunIntegrationTests {
         databaseName: String = "analytics",
         onTablesRefresh: (@Sendable () async -> Void)? = nil
     ) -> VisualQueryViewModel {
-        VisualQueryViewModel(
+        let refreshContext = VisualQueryTableRefreshContext(
+            databaseID: databaseName,
+            connectionID: UUID()
+        )
+        return VisualQueryViewModel(
             isConnected: { connected },
             databaseName: { databaseName },
+            tableRefreshContext: { refreshContext },
             executeSQL: { sql in
                 await service.executeQuery(sql, preferredColumnOrder: nil)
             },
-            onTablesRefresh: onTablesRefresh
+            onTablesRefresh: { _ in
+                await onTablesRefresh?()
+            }
         )
     }
 
@@ -310,6 +334,105 @@ struct VisualQueryRunIntegrationTests {
         #expect(vm.document.statementKind == .createTable)
         #expect(vm.document.createTableName == "notes")
         #expect(vm.statusMessage?.localizedCaseInsensitiveContains("notes") == true)
+    }
+
+    @Test func createSuccessPresentationShowsExecutedTableName() async {
+        let service = VisualQueryMockQueryService()
+        let vm = makeVM(connected: true, service: service, databaseName: "analytics")
+        _ = vm.chooseStatement(.createTable)
+        vm.setCreateTableName("notes")
+        vm.setCreateColumns([VisualCreateColumn(name: "body", type: .text)])
+        service.onExecute = {
+            vm.setCreateTableName("renamed_after_execution_started")
+        }
+
+        await vm.runQuery()
+        await vm.confirmCreateAndExecute()
+
+        let presentation = VisualQueryCanvasView.presentation(for: vm)
+        #expect(service.executedSQL.first?.contains("CREATE TABLE \"notes\"") == true)
+        #expect(presentation.visibleStatusMessage == "Created table notes in analytics")
+    }
+
+    @Test func createDatabaseSwitchDuringExecutionSkipsTableRefreshService() async {
+        let databaseService = VisualQueryMockDatabaseService()
+        let connectionState = ConnectionState(databaseService: databaseService)
+        connectionState.currentConnection = ConnectionProfile(
+            name: "Local",
+            host: "localhost",
+            username: "postgres",
+            database: "analytics"
+        )
+        connectionState.selectedDatabase = DatabaseInfo(name: "analytics")
+        let appState = AppState(connection: connectionState, query: QueryState())
+        let refreshService = VisualQueryMockTableRefreshService()
+        let refresher = VisualQueryTableRefresher(service: refreshService)
+        let vm = VisualQueryViewModel(
+            isConnected: { true },
+            databaseName: { appState.connection.selectedDatabase?.name ?? "" },
+            tableRefreshContext: {
+                refresher.captureContext(from: appState.connection)
+            },
+            executeSQL: { _ in
+                await Task.yield()
+                appState.connection.selectedDatabase = DatabaseInfo(name: "reporting")
+                return .success(rows: [], columnNames: [], executionTime: 0.01)
+            },
+            onTablesRefresh: { context in
+                await refresher.refreshTables(ifCurrent: context, appState: appState)
+            }
+        )
+        _ = vm.chooseStatement(.createTable)
+        vm.setCreateTableName("notes")
+        vm.setCreateColumns([VisualCreateColumn(name: "body", type: .text)])
+
+        await vm.runQuery()
+        await vm.confirmCreateAndExecute()
+
+        #expect(refreshService.loadTablesCallCount == 0)
+    }
+
+    @Test func createConnectionSwitchDuringExecutionSkipsTableRefreshService() async {
+        let databaseService = VisualQueryMockDatabaseService()
+        let connectionState = ConnectionState(databaseService: databaseService)
+        connectionState.currentConnection = ConnectionProfile(
+            name: "Local",
+            host: "localhost",
+            username: "postgres",
+            database: "analytics"
+        )
+        connectionState.selectedDatabase = DatabaseInfo(name: "analytics")
+        let appState = AppState(connection: connectionState, query: QueryState())
+        let refreshService = VisualQueryMockTableRefreshService()
+        let refresher = VisualQueryTableRefresher(service: refreshService)
+        let vm = VisualQueryViewModel(
+            isConnected: { true },
+            databaseName: { appState.connection.selectedDatabase?.name ?? "" },
+            tableRefreshContext: {
+                refresher.captureContext(from: appState.connection)
+            },
+            executeSQL: { _ in
+                await Task.yield()
+                appState.connection.currentConnection = ConnectionProfile(
+                    name: "Remote",
+                    host: "db.example.com",
+                    username: "postgres",
+                    database: "analytics"
+                )
+                return .success(rows: [], columnNames: [], executionTime: 0.01)
+            },
+            onTablesRefresh: { context in
+                await refresher.refreshTables(ifCurrent: context, appState: appState)
+            }
+        )
+        _ = vm.chooseStatement(.createTable)
+        vm.setCreateTableName("notes")
+        vm.setCreateColumns([VisualCreateColumn(name: "body", type: .text)])
+
+        await vm.runQuery()
+        await vm.confirmCreateAndExecute()
+
+        #expect(refreshService.loadTablesCallCount == 0)
     }
 
     @Test func metadataFailureAllowsManualFromAndDoesNotBlockRun() async {

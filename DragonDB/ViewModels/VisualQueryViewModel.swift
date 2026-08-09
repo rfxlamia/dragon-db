@@ -9,6 +9,11 @@
 
 import Foundation
 
+struct VisualQueryTableRefreshContext: Equatable, Sendable {
+    let databaseID: String
+    let connectionID: UUID
+}
+
 @Observable
 @MainActor
 final class VisualQueryViewModel {
@@ -23,21 +28,24 @@ final class VisualQueryViewModel {
     private let onDocumentChange: ((VisualQueryDocument) -> Void)?
     private let isConnected: () -> Bool
     private let databaseName: () -> String
+    private let tableRefreshContext: () -> VisualQueryTableRefreshContext?
     private let executeSQL: ((String) async -> QueryResult?)?
-    private let onTablesRefresh: (() async -> Void)?
+    private let onTablesRefresh: ((VisualQueryTableRefreshContext) async -> Void)?
 
     init(
         document: VisualQueryDocument = VisualQueryDocument(),
         onDocumentChange: ((VisualQueryDocument) -> Void)? = nil,
         isConnected: @escaping () -> Bool = { false },
         databaseName: @escaping () -> String = { "" },
+        tableRefreshContext: @escaping () -> VisualQueryTableRefreshContext? = { nil },
         executeSQL: ((String) async -> QueryResult?)? = nil,
-        onTablesRefresh: (() async -> Void)? = nil
+        onTablesRefresh: ((VisualQueryTableRefreshContext) async -> Void)? = nil
     ) {
         self.document = document
         self.onDocumentChange = onDocumentChange
         self.isConnected = isConnected
         self.databaseName = databaseName
+        self.tableRefreshContext = tableRefreshContext
         self.executeSQL = executeSQL
         self.onTablesRefresh = onTablesRefresh
     }
@@ -198,21 +206,28 @@ final class VisualQueryViewModel {
         guard !sql.isEmpty else { return }
         guard let executeSQL else { return }
 
+        let executedStatementKind = document.statementKind
+        let executedCreateTableName = document.createTableName
+        let executedDatabaseName = createConfirmationDatabaseName
+        let initiatingRefreshContext = executedStatementKind == .createTable
+            ? tableRefreshContext()
+            : nil
+
         let result = await executeSQL(sql)
         lastQueryResult = result
 
         guard let result else { return }
 
         if result.isSuccess {
-            if document.statementKind == .createTable {
-                let tableName = document.createTableName
-                let db = databaseName()
-                if db.isEmpty {
-                    statusMessage = "Created table \(tableName)"
+            if executedStatementKind == .createTable {
+                if executedDatabaseName.isEmpty {
+                    statusMessage = "Created table \(executedCreateTableName)"
                 } else {
-                    statusMessage = "Created table \(tableName) in \(db)"
+                    statusMessage = "Created table \(executedCreateTableName) in \(executedDatabaseName)"
                 }
-                await onTablesRefresh?()
+                if let initiatingRefreshContext {
+                    await onTablesRefresh?(initiatingRefreshContext)
+                }
             } else {
                 statusMessage = "Executed in \(QueryState.formatExecutionTime(result.executionTime))"
             }

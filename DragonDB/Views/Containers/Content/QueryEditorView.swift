@@ -20,7 +20,7 @@ struct QueryEditorView: View {
     @State private var visualTabId: UUID?
     @State private var visualColumnNames: [String] = []
 
-    private let tableRefreshService: TableRefreshServiceProtocol = TableRefreshService()
+    private let tableRefresher = VisualQueryTableRefresher(service: TableRefreshService())
     private let metadataLoader = VisualQueryMetadataLoader(service: TableMetadataService())
 
     /// Check if the current query (for this saved query) is executing
@@ -168,25 +168,20 @@ struct QueryEditorView: View {
         }
 
         let editor = viewModel
-        let refreshService = tableRefreshService
+        let refresher = tableRefresher
         visualViewModel = VisualQueryViewModel(
             document: tab.visualQueryDocument,
             onDocumentChange: { tab.visualQueryDocument = $0 },
             isConnected: { appState.connection.isConnected },
             databaseName: { appState.connection.selectedDatabase?.name ?? "" },
+            tableRefreshContext: {
+                refresher.captureContext(from: appState.connection)
+            },
             executeSQL: { sql in
                 await editor?.executeQuery(sql: sql, source: .visualBuilder)
             },
-            onTablesRefresh: {
-                guard let database = appState.connection.selectedDatabase,
-                      let connection = appState.connection.currentConnection else {
-                    return
-                }
-                await refreshService.loadTables(
-                    for: database,
-                    connection: connection,
-                    appState: appState
-                )
+            onTablesRefresh: { context in
+                await refresher.refreshTables(ifCurrent: context, appState: appState)
             }
         )
         visualTabId = tab.id
@@ -212,6 +207,39 @@ struct QueryEditorView: View {
         if let visualViewModel {
             result.apply(to: visualViewModel)
         }
+    }
+}
+
+@MainActor
+struct VisualQueryTableRefresher {
+    let service: TableRefreshServiceProtocol
+
+    func captureContext(from connectionState: ConnectionState) -> VisualQueryTableRefreshContext? {
+        guard let database = connectionState.selectedDatabase,
+              let connection = connectionState.currentConnection else {
+            return nil
+        }
+        return VisualQueryTableRefreshContext(
+            databaseID: database.id,
+            connectionID: connection.id
+        )
+    }
+
+    func refreshTables(
+        ifCurrent context: VisualQueryTableRefreshContext,
+        appState: AppState
+    ) async {
+        guard let database = appState.connection.selectedDatabase,
+              let connection = appState.connection.currentConnection,
+              database.id == context.databaseID,
+              connection.id == context.connectionID else {
+            return
+        }
+        await service.loadTables(
+            for: database,
+            connection: connection,
+            appState: appState
+        )
     }
 }
 

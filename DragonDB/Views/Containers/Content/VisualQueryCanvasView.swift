@@ -21,7 +21,7 @@ struct VisualQueryCanvasView: View {
     @State private var showGeneratedSQL = false
 
     private var presentation: VisualQueryCanvasPresentation {
-        VisualQueryCanvasPresentation(document: viewModel.document)
+        Self.presentation(for: viewModel)
     }
 
     var body: some View {
@@ -35,6 +35,15 @@ struct VisualQueryCanvasView: View {
                 onViewGeneratedSQL: { showGeneratedSQL = true },
                 onStartOver: { viewModel.startOver() }
             )
+
+            if let statusMessage = presentation.visibleStatusMessage {
+                Text(statusMessage)
+                    .font(.system(size: Constants.FontSize.small))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Constants.Spacing.medium)
+                    .padding(.vertical, Constants.Spacing.small)
+            }
 
             if let metadataError = viewModel.metadataErrorMessage, !metadataError.isEmpty {
                 Text(metadataError)
@@ -259,5 +268,13 @@ struct VisualQueryCanvasView: View {
     @MainActor
     static func selectTable(_ table: VisualTableReference, using viewModel: VisualQueryViewModel) {
         viewModel.setFromTable(name: table.name, schema: table.schema)
+    }
+
+    @MainActor
+    static func presentation(for viewModel: VisualQueryViewModel) -> VisualQueryCanvasPresentation {
+        VisualQueryCanvasPresentation(
+            document: viewModel.document,
+            statusMessage: viewModel.statusMessage
+        )
     }
 }
