@@ -54,7 +54,7 @@ This app uses macOS Keychain to securely store database passwords. Keychain acce
 
 ## Acknowledgments
 
-DragonDB is a fork of [O'Saasy](https://github.com/PostgresGUI) by Fikri Ghazi, built on the shoulders of giants. Special thanks to:
+DragonDB is a fork of [O'Saasy](https://github.com/PostgresGUI/app) by Fikri Ghazi, built on the shoulders of giants. Special thanks to:
 
 - The [PostgresNIO](https://github.com/vapor/postgres-nio) team for the excellent PostgreSQL client library
 - The [Swift NIO](https://github.com/apple/swift-nio) project for the networking foundation
