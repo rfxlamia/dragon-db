@@ -54,6 +54,9 @@ struct SchemaFieldPopover: View {
                             .buttonStyle(.plain)
                             .padding(.vertical, 4)
                             .padding(.horizontal, 6)
+                            .accessibilityIdentifier(
+                                VisualQueryAccessibility.schemaPopoverItem(title: title, item: item)
+                            )
                         }
                     }
                 }
@@ -63,5 +66,11 @@ struct SchemaFieldPopover: View {
         }
         .padding(Constants.Spacing.small)
         .frame(width: 240)
+    }
+}
+
+extension VisualQueryAccessibility {
+    static func schemaPopoverItem(title: String, item: String) -> String {
+        "visualQuery.schemaPopover.\(title.lowercased()).item.\(item)"
     }
 }

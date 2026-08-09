@@ -106,23 +106,29 @@ struct VisualClauseCardView: View {
             .accessibilityIdentifier(VisualQueryAccessibility.allColumnsToggle)
 
             if !allColumns {
-                schemaFieldButton(
-                    label: selectedColumnsLabel,
-                    accessibilityID: VisualQueryAccessibility.selectColumnsField,
-                    mode: .columns,
-                    needsFrom: document.fromTable == nil
+                schemaColumnField(
+                    text: Binding(
+                        get: { selectedColumnsText },
+                        set: { onSetSelectColumns(parseSelectColumns($0)) }
+                    ),
+                    placeholder: "column, column",
+                    fieldAccessibilityID: VisualQueryAccessibility.selectColumnsField,
+                    pickerAccessibilityID: VisualQueryAccessibility.selectColumnsPicker
                 )
             }
         }
     }
 
-    private var selectedColumnsLabel: String {
+    private var selectedColumnsText: String {
         if case .columns(let columns) = document.selectProjection {
-            let named = columns.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            if named.isEmpty { return "Choose columns…" }
-            return named.joined(separator: ", ")
+            return columns.joined(separator: ", ")
         }
-        return "Choose columns…"
+        return ""
+    }
+
+    private func parseSelectColumns(_ text: String) -> [String] {
+        text.components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
     }
 
     private var fromFields: some View {
@@ -145,6 +151,7 @@ struct VisualClauseCardView: View {
             }
             .buttonStyle(.borderless)
             .help("Choose a table")
+            .accessibilityIdentifier(VisualQueryAccessibility.fromTablePicker)
         }
     }
 
@@ -159,11 +166,14 @@ struct VisualClauseCardView: View {
     private var whereFields: some View {
         let condition = document.whereCondition ?? VisualWhereCondition(column: "", op: .equals, value: nil)
         return VStack(alignment: .leading, spacing: 6) {
-            schemaFieldButton(
-                label: condition.column.isEmpty ? "column" : condition.column,
-                accessibilityID: VisualQueryAccessibility.whereColumnField,
-                mode: .columns,
-                needsFrom: document.fromTable == nil
+            schemaColumnField(
+                text: Binding(
+                    get: { condition.column },
+                    set: { onSetWhere($0, condition.op, condition.value) }
+                ),
+                placeholder: "column",
+                fieldAccessibilityID: VisualQueryAccessibility.whereColumnField,
+                pickerAccessibilityID: VisualQueryAccessibility.whereColumnPicker
             )
 
             Picker(
@@ -197,11 +207,14 @@ struct VisualClauseCardView: View {
     private var orderByFields: some View {
         let order = document.orderBy ?? VisualOrderBy(column: "", direction: .asc)
         return HStack(spacing: 6) {
-            schemaFieldButton(
-                label: order.column.isEmpty ? "column" : order.column,
-                accessibilityID: VisualQueryAccessibility.orderByColumnField,
-                mode: .columns,
-                needsFrom: document.fromTable == nil
+            schemaColumnField(
+                text: Binding(
+                    get: { order.column },
+                    set: { onSetOrderBy($0, order.direction) }
+                ),
+                placeholder: "column",
+                fieldAccessibilityID: VisualQueryAccessibility.orderByColumnField,
+                pickerAccessibilityID: VisualQueryAccessibility.orderByColumnPicker
             )
 
             Picker(
@@ -248,40 +261,27 @@ struct VisualClauseCardView: View {
         [.equals, .notEquals, .greaterThan, .lessThan, .contains, .isEmpty]
     }
 
-    private func schemaFieldButton(
-        label: String,
-        accessibilityID: String,
-        mode: SchemaPopoverMode,
-        needsFrom: Bool
+    private func schemaColumnField(
+        text: Binding<String>,
+        placeholder: String,
+        fieldAccessibilityID: String,
+        pickerAccessibilityID: String
     ) -> some View {
-        Button {
-            popoverMode = mode
-            showSchemaPopover = true
-            _ = needsFrom
-        } label: {
-            HStack {
-                Text(label)
-                    .foregroundStyle(labelHasPlaceholder(label) ? .secondary : .primary)
-                    .lineLimit(1)
-                Spacer()
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(Color(nsColor: .textBackgroundColor))
-            .overlay(
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(accessibilityID)
-    }
+        HStack(spacing: 6) {
+            TextField(placeholder, text: text)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier(fieldAccessibilityID)
 
-    private func labelHasPlaceholder(_ label: String) -> Bool {
-        ["column", "Choose columns…"].contains(label)
+            Button {
+                popoverMode = .columns
+                showSchemaPopover = true
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .buttonStyle(.borderless)
+            .help("Choose a column")
+            .accessibilityIdentifier(pickerAccessibilityID)
+        }
     }
 
     @ViewBuilder
@@ -416,6 +416,7 @@ struct VisualStatementRootCardView: View {
                             )
                         )
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier(VisualQueryAccessibility.createColumnNameField(index))
 
                         Picker(
                             "Type",
@@ -434,6 +435,7 @@ struct VisualStatementRootCardView: View {
                         }
                         .labelsHidden()
                         .frame(width: 100)
+                        .accessibilityIdentifier(VisualQueryAccessibility.createColumnTypePicker(index))
 
                         Button {
                             var next = document.createColumns
@@ -444,6 +446,7 @@ struct VisualStatementRootCardView: View {
                         }
                         .buttonStyle(.borderless)
                         .disabled(document.createColumns.count <= 1)
+                        .accessibilityIdentifier(VisualQueryAccessibility.removeCreateColumn(index))
                     }
                 }
             }
@@ -459,6 +462,7 @@ struct VisualStatementRootCardView: View {
                 onSetCreateColumns(next)
             }
             .buttonStyle(.borderless)
+            .accessibilityIdentifier(VisualQueryAccessibility.addCreateColumn)
         }
         .onAppear {
             if document.createColumns.isEmpty {
@@ -469,5 +473,25 @@ struct VisualStatementRootCardView: View {
 
     private var createTypes: [VisualCreateColumnType] {
         [.text, .number, .date, .boolean]
+    }
+}
+
+extension VisualQueryAccessibility {
+    static let selectColumnsPicker = "visualQuery.selectColumnsPicker"
+    static let fromTablePicker = "visualQuery.fromTablePicker"
+    static let whereColumnPicker = "visualQuery.whereColumnPicker"
+    static let orderByColumnPicker = "visualQuery.orderByColumnPicker"
+    static let addCreateColumn = "visualQuery.addCreateColumn"
+
+    static func createColumnNameField(_ index: Int) -> String {
+        "visualQuery.createColumn.\(index).name"
+    }
+
+    static func createColumnTypePicker(_ index: Int) -> String {
+        "visualQuery.createColumn.\(index).type"
+    }
+
+    static func removeCreateColumn(_ index: Int) -> String {
+        "visualQuery.createColumn.\(index).remove"
     }
 }

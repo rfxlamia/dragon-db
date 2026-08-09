@@ -39,4 +39,33 @@ struct VisualQueryCanvasPresentationTests {
         #expect(identifiers.contains(VisualQueryAccessibility.runQuery))
         #expect(identifiers.contains(VisualQueryAccessibility.generatedSQLText))
     }
+
+    @Test func repeatedInteractiveControlIdentifiersAreStableAndUnique() {
+        let fixedIdentifiers = [
+            VisualQueryAccessibility.selectColumnsPicker,
+            VisualQueryAccessibility.fromTablePicker,
+            VisualQueryAccessibility.whereColumnPicker,
+            VisualQueryAccessibility.orderByColumnPicker,
+            VisualQueryAccessibility.addCreateColumn,
+            VisualQueryAccessibility.generatedSQLDone,
+        ]
+        #expect(Set(fixedIdentifiers).count == fixedIdentifiers.count)
+
+        let firstCreateRow = [
+            VisualQueryAccessibility.createColumnNameField(0),
+            VisualQueryAccessibility.createColumnTypePicker(0),
+            VisualQueryAccessibility.removeCreateColumn(0),
+        ]
+        let secondCreateRow = [
+            VisualQueryAccessibility.createColumnNameField(1),
+            VisualQueryAccessibility.createColumnTypePicker(1),
+            VisualQueryAccessibility.removeCreateColumn(1),
+        ]
+        #expect(Set(firstCreateRow + secondCreateRow).count == 6)
+
+        let tableItem = VisualQueryAccessibility.schemaPopoverItem(title: "Tables", item: "users")
+        let columnItem = VisualQueryAccessibility.schemaPopoverItem(title: "Columns", item: "users")
+        #expect(tableItem != columnItem)
+        #expect(columnItem == VisualQueryAccessibility.schemaPopoverItem(title: "Columns", item: "users"))
+    }
 }

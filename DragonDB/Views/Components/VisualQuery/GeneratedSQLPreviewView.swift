@@ -29,6 +29,7 @@ struct GeneratedSQLPreviewView: View {
                 .accessibilityIdentifier(VisualQueryAccessibility.copySQL)
                 Button("Done", action: onDismiss)
                     .keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier(VisualQueryAccessibility.generatedSQLDone)
             }
 
             ScrollView {
@@ -53,4 +54,8 @@ struct GeneratedSQLPreviewView: View {
         pasteboard.clearContents()
         pasteboard.setString(preview.sql, forType: .string)
     }
+}
+
+extension VisualQueryAccessibility {
+    static let generatedSQLDone = "visualQuery.generatedSQLDone"
 }
