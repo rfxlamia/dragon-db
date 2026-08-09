@@ -56,6 +56,12 @@ struct MainSplitView: View {
 
                     // Row 2: Query results
                     VStack(spacing: 0) {
+                        QueryResultsToolbar(viewModel: viewModel, searchText: $searchText)
+                            // Matches the leading inset QueryResultsComponent
+                            // applies to itself, so this bar lines up with the
+                            // pagination bar below it.
+                            .padding(.leading, 4)
+
                         if let viewModel = viewModel {
                             QueryResultsView(
                                 searchText: searchText,
@@ -71,11 +77,6 @@ struct MainSplitView: View {
                         }
                     }
                     .frame(minHeight: 300)
-                }
-            }
-            .toolbar {
-                if let viewModel = viewModel {
-                    DetailContentToolbar(viewModel: viewModel)
                 }
             }
             .onAppear {
@@ -94,7 +95,6 @@ struct MainSplitView: View {
             }
         }
         .navigationTitle(appState.connection.selectedDatabase?.name ?? "")
-        .searchable(text: $searchText, prompt: "Filter results")
         .modifier(DetailContentModalsWrapper(viewModel: viewModel))
         .overlay(alignment: .bottomTrailing) {
             if let toast = appState.query.mutationToast {
