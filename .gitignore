@@ -68,6 +68,7 @@ fastlane/test_output
 .repos
 .claude
 .cursor
+.claude.globals
 
 # OS
 .DS_Store
