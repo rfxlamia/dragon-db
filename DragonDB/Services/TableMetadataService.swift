@@ -95,6 +95,55 @@ final class TableMetadataService: TableMetadataServiceProtocol {
         return (primaryKeys: primaryKeyColumns, columnInfo: columnInfo)
     }
 
+    /// Fetch and cache columns for a picker table without mutating `selectedTable`.
+    /// Cache hit returns immediately; miss fetches via DatabaseService and writes `tableMetadataCache`.
+    func fetchAndCacheColumns(
+        for table: TableInfo,
+        connectionState: ConnectionState,
+        databaseService: DatabaseServiceProtocol
+    ) async -> Result<[ColumnInfo], Error> {
+        if let cached = connectionState.getColumnInfo(for: table) {
+            return .success(cached)
+        }
+
+        let databaseId = connectionState.selectedDatabase?.id
+        let connectionId = connectionState.currentConnection?.id
+        let tableId = table.id
+
+        let columnInfo: [ColumnInfo]
+        do {
+            columnInfo = try await databaseService.fetchColumnInfo(
+                schema: table.schema,
+                table: table.name
+            )
+        } catch {
+            DebugLog.print("⚠️ [TableMetadataService] Failed to fetch columns for picker table \(table.schema).\(table.name): \(error)")
+            return .failure(error)
+        }
+
+        // Race-guard: database/connection must still match. Do not require selectedTable.
+        guard connectionState.selectedDatabase?.id == databaseId,
+              connectionState.currentConnection?.id == connectionId else {
+            DebugLog.print("⚠️ [TableMetadataService] Connection context changed during column fetch for \(table.schema).\(table.name)")
+            return .failure(
+                NSError(
+                    domain: "TableMetadataService",
+                    code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "Connection context changed while loading columns"]
+                )
+            )
+        }
+
+        let existingCache = connectionState.tableMetadataCache[tableId]
+        connectionState.tableMetadataCache[tableId] = (
+            primaryKeys: existingCache?.primaryKeys,
+            columns: columnInfo
+        )
+
+        DebugLog.print("✅ [TableMetadataService] Cached columns for picker table \(table.schema).\(table.name)")
+        return .success(columnInfo)
+    }
+
     /// Update the selected table with metadata if not already set
     /// Also updates the metadata cache
     /// - Parameters:

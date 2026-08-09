@@ -3,7 +3,8 @@
 //  DragonDB
 //
 //  Orchestrates a per-tab VisualQueryDocument for the visual query builder UI.
-//  Does not sync with queryText; execution wiring arrives in a later task.
+//  Does not sync with queryText. Execution is injected as a closure backed by
+//  QueryEditorViewModel.executeQuery(sql:source:) in production.
 //
 
 import Foundation
@@ -14,18 +15,30 @@ final class VisualQueryViewModel {
     private(set) var document: VisualQueryDocument
     private(set) var isRunning = false
     private(set) var showCreateConfirmation = false
+    private(set) var metadataErrorMessage: String?
+    private(set) var statusMessage: String?
+    private(set) var lastQueryResult: QueryResult?
 
     private let onDocumentChange: ((VisualQueryDocument) -> Void)?
     private let isConnected: () -> Bool
+    private let databaseName: () -> String
+    private let executeSQL: ((String) async -> QueryResult?)?
+    private let onTablesRefresh: (() async -> Void)?
 
     init(
         document: VisualQueryDocument = VisualQueryDocument(),
         onDocumentChange: ((VisualQueryDocument) -> Void)? = nil,
-        isConnected: @escaping () -> Bool = { false }
+        isConnected: @escaping () -> Bool = { false },
+        databaseName: @escaping () -> String = { "" },
+        executeSQL: ((String) async -> QueryResult?)? = nil,
+        onTablesRefresh: (() async -> Void)? = nil
     ) {
         self.document = document
         self.onDocumentChange = onDocumentChange
         self.isConnected = isConnected
+        self.databaseName = databaseName
+        self.executeSQL = executeSQL
+        self.onTablesRefresh = onTablesRefresh
     }
 
     // MARK: - Derived state
@@ -125,6 +138,36 @@ final class VisualQueryViewModel {
         showCreateConfirmation = false
     }
 
+    // MARK: - Execution
+
+    /// Validates and runs the current visual query. CREATE shows confirmation first.
+    func runQuery() async {
+        guard runEnabled else { return }
+
+        if document.statementKind == .createTable {
+            _ = requestCreateConfirmation()
+            return
+        }
+
+        await performExecute()
+    }
+
+    /// Continues CREATE after user confirmation. Second call while in flight is a no-op.
+    func confirmCreateAndExecute() async {
+        guard showCreateConfirmation else { return }
+        showCreateConfirmation = false
+        await performExecute()
+    }
+
+    func reportMetadataFailure(_ message: String) {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        metadataErrorMessage = trimmed.isEmpty ? nil : trimmed
+    }
+
+    func clearMetadataError() {
+        metadataErrorMessage = nil
+    }
+
     // MARK: - External text editor (no sync)
 
     /// Observes text-editor buffer changes without mutating the visual document.
@@ -134,6 +177,37 @@ final class VisualQueryViewModel {
     }
 
     // MARK: - Private
+
+    private func performExecute() async {
+        guard beginRun() else { return }
+        defer { endRun() }
+
+        let sql = generatedSQL
+        guard !sql.isEmpty else { return }
+        guard let executeSQL else { return }
+
+        let result = await executeSQL(sql)
+        lastQueryResult = result
+
+        guard let result else { return }
+
+        if result.isSuccess {
+            if document.statementKind == .createTable {
+                let tableName = document.createTableName
+                let db = databaseName()
+                if db.isEmpty {
+                    statusMessage = "Created table \(tableName)"
+                } else {
+                    statusMessage = "Created table \(tableName) in \(db)"
+                }
+                await onTablesRefresh?()
+            } else {
+                statusMessage = "Executed in \(QueryState.formatExecutionTime(result.executionTime))"
+            }
+        } else if let error = result.error {
+            statusMessage = PostgresError.extractDetailedMessage(error)
+        }
+    }
 
     @discardableResult
     private func mutateReturning(_ body: (inout VisualQueryDocument) -> Bool) -> Bool {

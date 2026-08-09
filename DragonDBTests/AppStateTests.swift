@@ -123,6 +123,14 @@ final class DelayedMockTableMetadataService: TableMetadataServiceProtocol {
         primaryKeys: [String]?,
         columnInfo: [ColumnInfo]?
     ) {}
+
+    func fetchAndCacheColumns(
+        for table: TableInfo,
+        connectionState: ConnectionState,
+        databaseService: DatabaseServiceProtocol
+    ) async -> Result<[ColumnInfo], Error> {
+        .failure(NSError(domain: "DelayedMockTableMetadataService", code: -1))
+    }
 }
 
 // MARK: - Test Helpers

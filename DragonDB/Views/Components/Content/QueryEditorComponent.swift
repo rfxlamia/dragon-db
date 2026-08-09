@@ -8,59 +8,99 @@
 
 import SwiftUI
 
-struct QueryEditorComponent: View {
+struct QueryEditorComponent<VisualContent: View>: View {
     // Data
     let isExecuting: Bool
     let statusMessage: String?
     let lastExecutedAt: Date?
     let displayedElapsedTime: TimeInterval
-    
+
     // Bindings
     @Binding var queryText: String
-    
+    @Binding var editorMode: QueryEditorMode
+
     // Callbacks
     let onRunQuery: () -> Void
     let onCancelQuery: () -> Void
     let onShowHistory: () -> Void
 
+    // Visual mode canvas (hosted when editorMode == .visual)
+    private let visualContent: VisualContent
+
+    init(
+        isExecuting: Bool,
+        statusMessage: String?,
+        lastExecutedAt: Date?,
+        displayedElapsedTime: TimeInterval,
+        queryText: Binding<String>,
+        editorMode: Binding<QueryEditorMode>,
+        onRunQuery: @escaping () -> Void,
+        onCancelQuery: @escaping () -> Void,
+        onShowHistory: @escaping () -> Void,
+        @ViewBuilder visualContent: () -> VisualContent
+    ) {
+        self.isExecuting = isExecuting
+        self.statusMessage = statusMessage
+        self.lastExecutedAt = lastExecutedAt
+        self.displayedElapsedTime = displayedElapsedTime
+        self._queryText = queryText
+        self._editorMode = editorMode
+        self.onRunQuery = onRunQuery
+        self.onCancelQuery = onCancelQuery
+        self.onShowHistory = onShowHistory
+        self.visualContent = visualContent()
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            // Toolbar with execute/cancel button and stats
+            // Toolbar with execute/cancel button, mode toggle, and stats
             HStack(spacing: 0) {
-                // Always show Run Query button
-                Button(action: onRunQuery) {
-                    Label {
-                        Text("Run Query")
-                    } icon: {
-                        Image(systemName: "play.circle.fill")
+                if editorMode == .sql {
+                    // Always show Run Query button in SQL mode
+                    Button(action: onRunQuery) {
+                        Label {
+                            Text("Run Query")
+                        } icon: {
+                            Image(systemName: "play.circle.fill")
+                        }
+                    }
+                    .buttonStyle(.glass)
+                    .clipShape(Capsule())
+                    .tint(.green)
+                    .keyboardShortcut(.return, modifiers: [.command])
+
+                    // Show Stop button only after 3s of execution
+                    if isExecuting && displayedElapsedTime > 3 {
+                        Button(action: onCancelQuery) {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 12, weight: .medium))
+                                .frame(width: 16, height: 16)
+                        }
+                        .buttonStyle(.bordered)
+                        .glassEffect(.regular.interactive())
+                        .clipShape(Circle())
+                        .tint(.red)
+                        .keyboardShortcut(.escape, modifiers: [])
+                    }
+
+                    Button(action: onShowHistory) {
+                        Image(systemName: "clock.arrow.circlepath")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.secondary)
+                    .padding(.leading, 8)
+                    .help("View Query History")
+                }
+
+                Picker("Editor Mode", selection: $editorMode) {
+                    ForEach(QueryEditorMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
                     }
                 }
-                .buttonStyle(.glass)
-                .clipShape(Capsule())
-                .tint(.green)
-                .keyboardShortcut(.return, modifiers: [.command])
-
-                // Show Stop button only after 3s of execution
-                if isExecuting && displayedElapsedTime > 3 {
-                    Button(action: onCancelQuery) {
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 12, weight: .medium))
-                            .frame(width: 16, height: 16)
-                    }
-                    .buttonStyle(.bordered)
-                    .glassEffect(.regular.interactive())
-                    .clipShape(Circle())
-                    .tint(.red)
-                    .keyboardShortcut(.escape, modifiers: [])
-                }
-
-                Button(action: onShowHistory) {
-                    Image(systemName: "clock.arrow.circlepath")
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.secondary)
-                .padding(.leading, 8)
-                .help("View Query History")
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 160)
+                .padding(.leading, editorMode == .sql ? 12 : 0)
+                .accessibilityIdentifier(VisualQueryAccessibility.modeToggle)
 
                 Spacer()
 
@@ -70,8 +110,12 @@ struct QueryEditorComponent: View {
             .padding(Constants.Spacing.small)
             .background(Color(NSColor.controlBackgroundColor))
 
-            // Syntax highlighted editor
-            SyntaxHighlightedEditor(text: $queryText)
+            if editorMode == .visual {
+                visualContent
+            } else {
+                // Syntax highlighted editor
+                SyntaxHighlightedEditor(text: $queryText)
+            }
         }
     }
 

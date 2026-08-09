@@ -81,32 +81,51 @@ class QueryEditorViewModel {
 
     // MARK: - Query Execution
 
-    /// Execute the current query
-    func executeQuery() async {
-        DebugLog.print("🎬 [QueryEditorViewModel] Execute button clicked")
+    /// Execute a query through the shared QueryState / tab-cache / history pathway.
+    /// - Parameters:
+    ///   - sql: Optional SQL override. `nil` uses the text editor buffer (text mode default).
+    ///   - source: `.textEditor` associates results with the current saved query when present;
+    ///     `.visualBuilder` publishes results/history without binding to `currentSavedQueryId`.
+    @discardableResult
+    func executeQuery(
+        sql: String? = nil,
+        source: QueryExecutionSource = .textEditor
+    ) async -> QueryResult? {
+        DebugLog.print("🎬 [QueryEditorViewModel] Execute button clicked (source: \(source))")
 
         // Check if database is selected
         guard let database = appState.connection.selectedDatabase else {
             showNoDatabaseAlert = true
             DebugLog.print("⚠️ [QueryEditorViewModel] No database selected")
-            return
+            return nil
         }
 
         // Capture the tab that initiated this query
         guard let executingTab = tabManager.activeTab else {
             DebugLog.print("⚠️ [QueryEditorViewModel] No active tab")
-            return
+            return nil
+        }
+
+        let queryText: String
+        switch source {
+        case .textEditor:
+            queryText = sql ?? appState.query.queryText
+        case .visualBuilder:
+            guard let sql, !sql.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                DebugLog.print("⚠️ [QueryEditorViewModel] Visual builder supplied empty SQL")
+                return nil
+            }
+            queryText = sql
         }
 
         let executingTabId = executingTab.id
-        let queryText = appState.query.queryText
         let queryType = QueryTypeDetector.detect(queryText)
         let tableName = QueryTypeDetector.extractTableName(queryText)
         queryExecutionRequestId += 1
         let requestId = queryExecutionRequestId
 
-        // Capture the saved query ID that initiated this execution
-        let executingSavedQueryId = appState.query.currentSavedQueryId
+        // Visual builder must not attach results to the unrelated text buffer's saved-query ID.
+        let executingSavedQueryId: UUID? = (source == .textEditor) ? appState.query.currentSavedQueryId : nil
 
         // Start execution tracking on the tab
         executingTab.startQueryExecution()
@@ -126,19 +145,19 @@ class QueryEditorViewModel {
 
         guard requestId == queryExecutionRequestId else {
             DebugLog.print("⚠️ [QueryEditorViewModel] Query result superseded, ignoring stale completion")
-            return
+            return nil
         }
 
         if let error = result.error, isCancellationLike(error) {
             DebugLog.print("⚠️ [QueryEditorViewModel] Query cancelled/superseded before completion")
             executingTab.finishQueryExecution()
-            return
+            return result
         }
 
         // Finish execution tracking on the tab
         executingTab.finishQueryExecution()
 
-        // Log to QueryHistory
+        // Log to QueryHistory (visual and text both record the SQL that ran)
         let historyEntry = QueryHistory(
             queryText: queryText,
             executionTime: result.executionTime,
@@ -149,9 +168,17 @@ class QueryEditorViewModel {
         modelContext.insert(historyEntry)
         try? modelContext.save()
 
-        // Check if this tab is still the active tab AND the same saved query is still selected
+        // Check if this tab is still the active tab AND (for text) the same saved query is still selected.
+        // Visual builder always treats saved-query association as satisfied (nil == nil).
         let isStillActiveTab = tabManager.activeTab?.id == executingTabId
-        let isSameSavedQuery = appState.query.currentSavedQueryId == executingSavedQueryId
+        let isSameSavedQuery: Bool = {
+            switch source {
+            case .visualBuilder:
+                return true
+            case .textEditor:
+                return appState.query.currentSavedQueryId == executingSavedQueryId
+            }
+        }()
 
         // Clear the executing saved query ID
         appState.query.executingSavedQueryId = nil
@@ -202,8 +229,8 @@ class QueryEditorViewModel {
                     )
                 }
 
-                // Cache results in-memory for the executing saved query (not current one)
-                if let savedQueryId = executingSavedQueryId {
+                // Cache results in-memory for the executing saved query (text editor only)
+                if source == .textEditor, let savedQueryId = executingSavedQueryId {
                     let columnNames = result.columnNames.isEmpty ? [] : result.columnNames
                     appState.query.cacheResults(for: savedQueryId, rows: result.rows, columnNames: columnNames)
                     if isSameSavedQuery {
@@ -242,6 +269,8 @@ class QueryEditorViewModel {
 
             DebugLog.print("❌ [QueryEditorViewModel] Query execution failed: \(result.error!)")
         }
+
+        return result
     }
 
     // MARK: - Query Persistence

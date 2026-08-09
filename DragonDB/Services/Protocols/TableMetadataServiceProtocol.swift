@@ -26,4 +26,12 @@ protocol TableMetadataServiceProtocol {
         primaryKeys: [String]?,
         columnInfo: [ColumnInfo]?
     )
+
+    /// Fetch and cache column info for an arbitrary picker table without changing sidebar selection.
+    /// Reads `ConnectionState.getColumnInfo` first; fetches on cache miss; race-guards database/connection IDs.
+    func fetchAndCacheColumns(
+        for table: TableInfo,
+        connectionState: ConnectionState,
+        databaseService: DatabaseServiceProtocol
+    ) async -> Result<[ColumnInfo], Error>
 }

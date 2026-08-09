@@ -36,6 +36,15 @@ struct VisualQueryCanvasView: View {
                 onStartOver: { viewModel.startOver() }
             )
 
+            if let metadataError = viewModel.metadataErrorMessage, !metadataError.isEmpty {
+                Text(metadataError)
+                    .font(.system(size: Constants.FontSize.small))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Constants.Spacing.medium)
+                    .padding(.vertical, Constants.Spacing.small)
+            }
+
             Divider()
 
             canvas
@@ -225,8 +234,9 @@ struct VisualQueryCanvasView: View {
                 }
                 .accessibilityIdentifier(VisualQueryAccessibility.confirmCreateCancel)
                 Button(VisualQueryCopy.confirmCreateContinueTitle) {
-                    // Execution wiring arrives in T5; dismiss confirmation for now.
-                    viewModel.cancelCreateConfirmation()
+                    Task {
+                        await viewModel.confirmCreateAndExecute()
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
                 .accessibilityIdentifier(VisualQueryAccessibility.confirmCreateContinue)
@@ -237,12 +247,8 @@ struct VisualQueryCanvasView: View {
     }
 
     private func handleRun() {
-        if viewModel.document.statementKind == .createTable {
-            _ = viewModel.requestCreateConfirmation()
-            return
+        Task {
+            await viewModel.runQuery()
         }
-        // SELECT execution is wired in T5; keep Run affordance bound to VM eligibility.
-        _ = viewModel.beginRun()
-        viewModel.endRun()
     }
 }
