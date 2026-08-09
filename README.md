@@ -44,6 +44,16 @@ If you don't want to open Xcode to configure code signing manually, you can use 
 
 When you select your team in step 3, Xcode modifies `project.pbxproj` with your team ID. **Do not include this change in your pull request.**
 
+To stop your local Team ID from showing up as a change in `git status` at all, set up this local (per-clone) git filter once:
+
+```bash
+git config filter.xcode-devteam.clean "sed -E 's/DEVELOPMENT_TEAM = [^;]+;/DEVELOPMENT_TEAM = \"\";/g'"
+git config filter.xcode-devteam.smudge cat
+git config filter.xcode-devteam.required false
+```
+
+This only normalizes the `DEVELOPMENT_TEAM` line when git looks at the file (matched via `.gitattributes`) — your actual Team ID on disk is untouched, and real changes elsewhere in `project.pbxproj` still show up normally.
+
 ### Why Code Signing is Required
 
 This app uses macOS Keychain to securely store database passwords. Keychain access requires a valid code signature, so even local development builds need to be signed with your team ID.
