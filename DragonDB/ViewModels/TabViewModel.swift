@@ -37,6 +37,9 @@ final class TabViewModel: Identifiable {
     var cachedResults: [TableRow]?
     var cachedColumnNames: [String]?
 
+    /// In-memory visual query document for this tab (not persisted to SwiftData).
+    var visualQueryDocument: VisualQueryDocument = VisualQueryDocument()
+
     /// Track if this tab has been marked for deletion
     var isPendingDeletion: Bool = false
 
