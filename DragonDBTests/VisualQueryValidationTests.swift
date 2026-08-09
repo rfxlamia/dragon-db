@@ -86,4 +86,51 @@ struct VisualQueryValidationTests {
         let eligibility = VisualQueryValidation.canRun(document: document, isConnected: true)
         #expect(eligibility.isRunnable == true)
     }
+
+    @Test func createTableWithBlankTableNameIsNotRunnable() {
+        var document = VisualQueryDocument()
+        _ = document.chooseStatement(.createTable)
+        document.setCreateTableName("   ")
+        document.setCreateColumns([VisualCreateColumn(name: "body", type: .text)])
+
+        let eligibility = VisualQueryValidation.canRun(document: document, isConnected: true)
+
+        #expect(eligibility.isRunnable == false)
+    }
+
+    @Test func createTableWithZeroColumnsIsNotRunnable() {
+        var document = VisualQueryDocument()
+        _ = document.chooseStatement(.createTable)
+        document.setCreateTableName("notes")
+        document.setCreateColumns([])
+
+        let eligibility = VisualQueryValidation.canRun(document: document, isConnected: true)
+
+        #expect(eligibility.isRunnable == false)
+    }
+
+    @Test func createTableWithWhitespaceOnlyColumnIsNotRunnable() {
+        var document = VisualQueryDocument()
+        _ = document.chooseStatement(.createTable)
+        document.setCreateTableName("notes")
+        document.setCreateColumns([VisualCreateColumn(name: "   ", type: .text)])
+
+        let eligibility = VisualQueryValidation.canRun(document: document, isConnected: true)
+
+        #expect(eligibility.isRunnable == false)
+    }
+
+    @Test func createTableWithValidAndWhitespaceOnlyColumnsIsNotRunnable() {
+        var document = VisualQueryDocument()
+        _ = document.chooseStatement(.createTable)
+        document.setCreateTableName("notes")
+        document.setCreateColumns([
+            VisualCreateColumn(name: "body", type: .text),
+            VisualCreateColumn(name: "   ", type: .date)
+        ])
+
+        let eligibility = VisualQueryValidation.canRun(document: document, isConnected: true)
+
+        #expect(eligibility.isRunnable == false)
+    }
 }

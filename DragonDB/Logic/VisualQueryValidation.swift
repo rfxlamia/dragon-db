@@ -107,10 +107,9 @@ enum VisualQueryValidation {
             return .blocked("Enter a table name")
         }
 
-        let validColumns = document.createColumns.filter {
-            !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-        if validColumns.isEmpty {
+        if document.createColumns.isEmpty || document.createColumns.contains(where: {
+            $0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }) {
             return .blocked("Add at least one column with a name")
         }
 
