@@ -40,6 +40,7 @@ private final class VisualQueryMockDatabaseService: DatabaseServiceProtocol {
     var isConnected: Bool = true
     var connectedDatabase: String? = "analytics"
     private(set) var fetchColumnInfoCallCount = 0
+    private(set) var lastFetchedColumnTable: (schema: String, name: String)?
     var columnInfo: [ColumnInfo] = []
     var fetchColumnInfoError: Error?
 
@@ -98,6 +99,7 @@ private final class VisualQueryMockDatabaseService: DatabaseServiceProtocol {
 
     func fetchColumnInfo(schema: String, table: String) async throws -> [ColumnInfo] {
         fetchColumnInfoCallCount += 1
+        lastFetchedColumnTable = (schema, table)
         if let fetchColumnInfoError {
             throw fetchColumnInfoError
         }
@@ -382,6 +384,94 @@ struct VisualQueryRunIntegrationTests {
         #expect(harness.connectionState.selectedTable == nil)
         _ = await harness.loadColumns()
         #expect(harness.databaseService.fetchColumnInfoCallCount == 1)
+    }
+
+    @Test func auditTablePickerSelectionPreservesSchemaForSQLAndMetadata() async throws {
+        let queryService = VisualQueryMockQueryService()
+        let vm = makeVM(connected: true, service: queryService)
+        _ = vm.chooseStatement(.select)
+        _ = vm.addClause(.from)
+
+        let pickerTable = VisualTableReference(schema: "audit", name: "events")
+        VisualQueryCanvasView.selectTable(pickerTable, using: vm)
+
+        let databaseService = VisualQueryMockDatabaseService()
+        databaseService.columnInfo = [ColumnInfo(name: "id", dataType: "bigint")]
+        let connectionState = ConnectionState(databaseService: databaseService)
+        connectionState.currentConnection = ConnectionProfile(
+            name: "Local",
+            host: "localhost",
+            username: "postgres",
+            database: "analytics"
+        )
+        connectionState.selectedDatabase = DatabaseInfo(name: "analytics")
+        let loader = VisualQueryMetadataLoader(service: TableMetadataService())
+
+        let metadata = await loader.loadColumns(
+            for: try #require(vm.document.fromTable),
+            availableTables: [TableInfo(name: "events", schema: "audit")],
+            connectionState: connectionState,
+            databaseService: databaseService
+        )
+        await vm.runQuery()
+
+        #expect(metadata.columnNames == ["id"])
+        #expect(databaseService.lastFetchedColumnTable?.schema == "audit")
+        #expect(databaseService.lastFetchedColumnTable?.name == "events")
+        #expect(queryService.executedSQL == ["SELECT * FROM \"audit\".\"events\""])
+    }
+
+    @Test func createConfirmationCopyNamesCapturedDatabase() async {
+        let service = VisualQueryMockQueryService()
+        let vm = makeVM(connected: true, service: service, databaseName: "analytics")
+        _ = vm.chooseStatement(.createTable)
+        vm.setCreateTableName("notes")
+        vm.setCreateColumns([VisualCreateColumn(name: "body", type: .text)])
+
+        await vm.runQuery()
+
+        #expect(vm.createConfirmationMessage.contains("analytics"))
+        #expect(vm.createConfirmationMessage.contains("notes"))
+    }
+
+    @Test func metadataServiceFailureReachesColumnPopoverAndManualEntryStillWorks() async throws {
+        let databaseService = VisualQueryMockDatabaseService()
+        databaseService.fetchColumnInfoError = NSError(
+            domain: "VisualQueryRunIntegrationTests",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "metadata unavailable"]
+        )
+        let connectionState = ConnectionState(databaseService: databaseService)
+        connectionState.currentConnection = ConnectionProfile(
+            name: "Local",
+            host: "localhost",
+            username: "postgres",
+            database: "analytics"
+        )
+        connectionState.selectedDatabase = DatabaseInfo(name: "analytics")
+        let loader = VisualQueryMetadataLoader(service: TableMetadataService())
+        let metadata = await loader.loadColumns(
+            for: VisualTableReference(schema: "audit", name: "events"),
+            availableTables: [TableInfo(name: "events", schema: "audit")],
+            connectionState: connectionState,
+            databaseService: databaseService
+        )
+        let service = VisualQueryMockQueryService()
+        let vm = makeVM(connected: true, service: service)
+        _ = vm.chooseStatement(.select)
+        _ = vm.addClause(.from)
+        vm.setFromTable(name: "events", schema: "audit")
+        metadata.apply(to: vm)
+
+        let popoverMessage = SchemaFieldPopover<String>.emptyStateMessage(
+            itemsAreEmpty: true,
+            needsFromMessage: nil,
+            errorMessage: vm.metadataErrorMessage
+        )
+        vm.setSelectColumns(["manual_id"])
+
+        #expect(popoverMessage == "Could not load columns. You can still type a name.")
+        #expect(vm.document.selectProjection == .columns(["manual_id"]))
     }
 
     @Test func concurrentCreateConfirmationExecutesOnlyOnce() async {

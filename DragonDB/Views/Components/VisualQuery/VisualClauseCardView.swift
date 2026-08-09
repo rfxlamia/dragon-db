@@ -10,11 +10,13 @@ import SwiftUI
 struct VisualClauseCardView: View {
     let kind: VisualClauseKind
     let document: VisualQueryDocument
-    let tableNames: [String]
+    let tables: [VisualTableReference]
     let columnNames: [String]
+    let metadataErrorMessage: String?
     let onDelete: () -> Void
     let onSetSelectColumns: ([String]) -> Void
     let onSetFromTable: (String) -> Void
+    let onSelectFromTable: (VisualTableReference) -> Void
     let onSetWhere: (String, VisualWhereOperator, String?) -> Void
     let onSetOrderBy: (String, VisualOrderDirection) -> Void
     let onSetLimitText: (String) -> Void
@@ -290,10 +292,12 @@ struct VisualClauseCardView: View {
         case .tables:
             SchemaFieldPopover(
                 title: "Tables",
-                items: tableNames,
-                needsFromMessage: nil
-            ) { name in
-                onSetFromTable(name)
+                items: tables,
+                itemTitle: tableDisplayName,
+                needsFromMessage: nil,
+                errorMessage: nil
+            ) { table in
+                onSelectFromTable(table)
                 showSchemaPopover = false
             }
         case .columns:
@@ -301,12 +305,21 @@ struct VisualClauseCardView: View {
             SchemaFieldPopover(
                 title: "Columns",
                 items: needsFrom ? [] : columnNames,
-                needsFromMessage: needsFrom ? VisualQueryCopy.columnPopoverNeedsFromMessage : nil
+                itemTitle: { $0 },
+                needsFromMessage: needsFrom ? VisualQueryCopy.columnPopoverNeedsFromMessage : nil,
+                errorMessage: needsFrom ? nil : metadataErrorMessage
             ) { name in
                 applyColumnSelection(name)
                 showSchemaPopover = false
             }
         }
+    }
+
+    private func tableDisplayName(_ table: VisualTableReference) -> String {
+        guard let schema = table.schema, schema != "public" else {
+            return table.name
+        }
+        return "\(schema).\(table.name)"
     }
 
     private func applyColumnSelection(_ name: String) {

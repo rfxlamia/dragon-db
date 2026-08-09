@@ -11,8 +11,8 @@ import SwiftUI
 struct VisualQueryCanvasView: View {
     @Bindable var viewModel: VisualQueryViewModel
 
-    /// Injectable table names for the FROM popover (no live DB required in this task).
-    var tableNames: [String] = []
+    /// Injectable table references for the FROM popover.
+    var tables: [VisualTableReference] = []
     /// Injectable column names for column popovers (empty until FROM set / metadata wired in T5).
     var columnNames: [String] = []
 
@@ -117,8 +117,9 @@ struct VisualQueryCanvasView: View {
                     VisualClauseCardView(
                         kind: kind,
                         document: viewModel.document,
-                        tableNames: tableNames,
+                        tables: tables,
                         columnNames: columnNames,
+                        metadataErrorMessage: viewModel.metadataErrorMessage,
                         onDelete: {
                             if kind == .select {
                                 viewModel.startOver()
@@ -128,6 +129,9 @@ struct VisualQueryCanvasView: View {
                         },
                         onSetSelectColumns: { viewModel.setSelectColumns($0) },
                         onSetFromTable: { viewModel.setFromTable($0) },
+                        onSelectFromTable: { table in
+                            Self.selectTable(table, using: viewModel)
+                        },
                         onSetWhere: { column, op, value in
                             viewModel.setWhereCondition(column: column, op: op, value: value)
                         },
@@ -225,7 +229,7 @@ struct VisualQueryCanvasView: View {
         VStack(alignment: .leading, spacing: Constants.Spacing.medium) {
             Text(VisualQueryCopy.confirmCreateTitle)
                 .font(.headline)
-            Text("This will create table \"\(viewModel.document.createTableName)\" in the connected database.")
+            Text(viewModel.createConfirmationMessage)
                 .foregroundStyle(.secondary)
             HStack {
                 Spacer()
@@ -250,5 +254,10 @@ struct VisualQueryCanvasView: View {
         Task {
             await viewModel.runQuery()
         }
+    }
+
+    @MainActor
+    static func selectTable(_ table: VisualTableReference, using viewModel: VisualQueryViewModel) {
+        viewModel.setFromTable(name: table.name, schema: table.schema)
     }
 }

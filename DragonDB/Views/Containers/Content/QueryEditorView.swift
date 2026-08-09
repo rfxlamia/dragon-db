@@ -21,7 +21,7 @@ struct QueryEditorView: View {
     @State private var visualColumnNames: [String] = []
 
     private let tableRefreshService: TableRefreshServiceProtocol = TableRefreshService()
-    private let tableMetadataService: TableMetadataServiceProtocol = TableMetadataService()
+    private let metadataLoader = VisualQueryMetadataLoader(service: TableMetadataService())
 
     /// Check if the current query (for this saved query) is executing
     private var isCurrentQueryExecuting: Bool {
@@ -39,8 +39,10 @@ struct QueryEditorView: View {
         return appState.query.isExecutingQuery && !appState.query.isExecutingTableQuery
     }
 
-    private var tableDisplayNames: [String] {
-        appState.connection.tables.map(\.displayName)
+    private var visualTableReferences: [VisualTableReference] {
+        appState.connection.tables.map {
+            VisualTableReference(schema: $0.schema, name: $0.name)
+        }
     }
 
     var body: some View {
@@ -70,7 +72,7 @@ struct QueryEditorView: View {
             if let visualViewModel {
                 VisualQueryCanvasView(
                     viewModel: visualViewModel,
-                    tableNames: tableDisplayNames,
+                    tables: visualTableReferences,
                     columnNames: visualColumnNames
                 )
             } else {
@@ -198,42 +200,66 @@ struct QueryEditorView: View {
             return
         }
 
-        // Prefer matching a known sidebar table so schema/id align with the cache key.
-        let matchedTable = appState.connection.tables.first { table in
-            table.name == fromTable.name
-                && (fromTable.schema == nil || fromTable.schema == table.schema)
-        }
-
-        let tableInfo: TableInfo
-        if let matchedTable {
-            tableInfo = matchedTable
-        } else {
-            tableInfo = TableInfo(
-                name: fromTable.name,
-                schema: fromTable.schema ?? "public"
-            )
-        }
-
-        if let cached = appState.connection.getColumnInfo(for: tableInfo) {
-            visualColumnNames = cached.map(\.name)
-            visualViewModel?.clearMetadataError()
-            return
-        }
-
-        let result = await tableMetadataService.fetchAndCacheColumns(
-            for: tableInfo,
+        let result = await metadataLoader.loadColumns(
+            for: fromTable,
+            availableTables: appState.connection.tables,
             connectionState: appState.connection,
             databaseService: appState.connection.databaseService
         )
 
+        guard visualViewModel?.document.fromTable == fromTable else { return }
+        visualColumnNames = result.columnNames
+        if let visualViewModel {
+            result.apply(to: visualViewModel)
+        }
+    }
+}
+
+struct VisualQueryMetadataLoadResult {
+    let columnNames: [String]
+    let errorMessage: String?
+
+    @MainActor
+    func apply(to viewModel: VisualQueryViewModel) {
+        if let errorMessage {
+            viewModel.reportMetadataFailure(errorMessage)
+        } else {
+            viewModel.clearMetadataError()
+        }
+    }
+}
+
+@MainActor
+struct VisualQueryMetadataLoader {
+    let service: TableMetadataServiceProtocol
+
+    func loadColumns(
+        for reference: VisualTableReference,
+        availableTables: [TableInfo],
+        connectionState: ConnectionState,
+        databaseService: DatabaseServiceProtocol
+    ) async -> VisualQueryMetadataLoadResult {
+        let table = availableTables.first { candidate in
+            candidate.name == reference.name
+                && (reference.schema == nil || candidate.schema == reference.schema)
+        } ?? TableInfo(name: reference.name, schema: reference.schema ?? "public")
+
+        let result = await service.fetchAndCacheColumns(
+            for: table,
+            connectionState: connectionState,
+            databaseService: databaseService
+        )
+
         switch result {
         case .success(let columns):
-            visualColumnNames = columns.map(\.name)
-            visualViewModel?.clearMetadataError()
+            return VisualQueryMetadataLoadResult(
+                columnNames: columns.map(\.name),
+                errorMessage: nil
+            )
         case .failure:
-            visualColumnNames = []
-            visualViewModel?.reportMetadataFailure(
-                "Could not load columns. You can still type a name."
+            return VisualQueryMetadataLoadResult(
+                columnNames: [],
+                errorMessage: "Could not load columns. You can still type a name."
             )
         }
     }

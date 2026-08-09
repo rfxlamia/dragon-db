@@ -15,6 +15,7 @@ final class VisualQueryViewModel {
     private(set) var document: VisualQueryDocument
     private(set) var isRunning = false
     private(set) var showCreateConfirmation = false
+    private(set) var createConfirmationDatabaseName = ""
     private(set) var metadataErrorMessage: String?
     private(set) var statusMessage: String?
     private(set) var lastQueryResult: QueryResult?
@@ -55,6 +56,14 @@ final class VisualQueryViewModel {
         VisualQueryValidation.canRun(document: document, isConnected: isConnected()).helpMessage
     }
 
+    var createConfirmationMessage: String {
+        let tableName = document.createTableName
+        if createConfirmationDatabaseName.isEmpty {
+            return "This will create table \"\(tableName)\" in the connected database."
+        }
+        return "This will create table \"\(tableName)\" in database \"\(createConfirmationDatabaseName)\"."
+    }
+
     // MARK: - Document mutators
 
     @discardableResult
@@ -73,6 +82,7 @@ final class VisualQueryViewModel {
 
     func startOver() {
         mutateAndPublish { $0.startOver() }
+        createConfirmationDatabaseName = ""
     }
 
     func availableNextClauses() -> [VisualClauseKind] {
@@ -130,6 +140,8 @@ final class VisualQueryViewModel {
     func requestCreateConfirmation() -> Bool {
         guard document.statementKind == .createTable else { return false }
         guard runEnabled else { return false }
+        createConfirmationDatabaseName = databaseName()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         showCreateConfirmation = true
         return true
     }

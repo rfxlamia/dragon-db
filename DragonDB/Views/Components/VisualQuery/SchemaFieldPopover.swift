@@ -7,18 +7,20 @@
 
 import SwiftUI
 
-struct SchemaFieldPopover: View {
+struct SchemaFieldPopover<Item: Hashable>: View {
     let title: String
-    let items: [String]
+    let items: [Item]
+    let itemTitle: (Item) -> String
     let needsFromMessage: String?
-    let onSelect: (String) -> Void
+    let errorMessage: String?
+    let onSelect: (Item) -> Void
 
     @State private var searchText = ""
 
-    private var filteredItems: [String] {
+    private var filteredItems: [Item] {
         let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return items }
-        return items.filter { $0.localizedCaseInsensitiveContains(trimmed) }
+        return items.filter { itemTitle($0).localizedCaseInsensitiveContains(trimmed) }
     }
 
     var body: some View {
@@ -31,8 +33,8 @@ struct SchemaFieldPopover: View {
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier(VisualQueryAccessibility.schemaPopoverSearch)
 
-            if let needsFromMessage, items.isEmpty {
-                Text(needsFromMessage)
+            if let emptyStateMessage {
+                Text(emptyStateMessage)
                     .font(.system(size: Constants.FontSize.small))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -47,7 +49,7 @@ struct SchemaFieldPopover: View {
                             Button {
                                 onSelect(item)
                             } label: {
-                                Text(item)
+                                Text(itemTitle(item))
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .contentShape(Rectangle())
                             }
@@ -55,7 +57,10 @@ struct SchemaFieldPopover: View {
                             .padding(.vertical, 4)
                             .padding(.horizontal, 6)
                             .accessibilityIdentifier(
-                                VisualQueryAccessibility.schemaPopoverItem(title: title, item: item)
+                                VisualQueryAccessibility.schemaPopoverItem(
+                                    title: title,
+                                    item: itemTitle(item)
+                                )
                             )
                         }
                     }
@@ -66,6 +71,23 @@ struct SchemaFieldPopover: View {
         }
         .padding(Constants.Spacing.small)
         .frame(width: 240)
+    }
+
+    private var emptyStateMessage: String? {
+        Self.emptyStateMessage(
+            itemsAreEmpty: items.isEmpty,
+            needsFromMessage: needsFromMessage,
+            errorMessage: errorMessage
+        )
+    }
+
+    static func emptyStateMessage(
+        itemsAreEmpty: Bool,
+        needsFromMessage: String?,
+        errorMessage: String?
+    ) -> String? {
+        guard itemsAreEmpty else { return nil }
+        return needsFromMessage ?? errorMessage
     }
 }
 
