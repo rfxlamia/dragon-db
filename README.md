@@ -1,29 +1,26 @@
-# PostgresGUI - A native PostgreSQL client for macOS
+# DragonDB - A native PostgreSQL client for macOS
 
-![PostgresGUI screenshot in dark mode](https://github.com/PostgresGUI/website/blob/main/public/screenshots2/PostgresGUI%20-%20Dark%20mode.png?raw=true)
+[![Platform](https://img.shields.io/badge/platform-macOS%2026-lightgrey.svg)](https://www.apple.com/macos)
 
-[![Version](https://img.shields.io/badge/version-1.1.4-blue.svg)](https://postgresgui.com)
-  [![Platform](https://img.shields.io/badge/platform-macOS%2026-lightgrey.svg)](https://www.apple.com/macos)
-
-PostgresGUI is a focused, native [PostgreSQL GUI for Mac](https://postgresgui.com/postgresql-gui-mac).
+DragonDB is a focused, native PostgreSQL GUI for Mac.
 It connects to local and hosted PostgreSQL databases without sending connection
-details, queries, or results through a PostgresGUI server.
+details, queries, or results through a DragonDB server.
 
 ## Getting started
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/PostgresGUI/app.git
-   cd app
+   git clone https://github.com/rfxlamia/dragon-db.git
+   cd dragon-db
    ```
 
 2. Open the project in Xcode:
    ```bash
-   open PostgresGUI.xcodeproj
+   open DragonDB.xcodeproj
    ```
 
 3. IMPORTANT: Configure code signing:
-   - Select the **PostgresGUI** target in the project navigator
+   - Select the **DragonDB** target in the project navigator
    - Go to **Signing & Capabilities** tab
    - Select your **Team** from the dropdown (use your Apple ID's "Personal Team" if you don't have a paid developer account)
 
@@ -53,19 +50,11 @@ This app uses macOS Keychain to securely store database passwords. Keychain acce
 
 ## Support
 
-- Visit [postgresgui.com/support](https://postgresgui.com/support) for help and documentation
-- Report bugs on [GitHub Issues](https://github.com/PostgresGUI/postgresgui/issues)
-
-## PostgreSQL guides
-
-- [Connect to PostgreSQL through an SSH tunnel](https://postgresgui.com/blog/ssh-tunnel-postgres)
-- [Connect PostgresGUI to Supabase](https://postgresgui.com/blog/connect-postgresgui-to-supabase)
-- [Connect PostgresGUI to Neon](https://postgresgui.com/blog/connect-postgresgui-to-neon)
-- [Read EXPLAIN ANALYZE output](https://postgresgui.com/blog/explain-analyze-postgres)
+- Report bugs on [GitHub Issues](https://github.com/rfxlamia/dragon-db/issues)
 
 ## Acknowledgments
 
-PostgresGUI is built on the shoulders of giants. Special thanks to:
+DragonDB is a fork of [O'Saasy](https://github.com/PostgresGUI) by Fikri Ghazi, built on the shoulders of giants. Special thanks to:
 
 - The [PostgresNIO](https://github.com/vapor/postgres-nio) team for the excellent PostgreSQL client library
 - The [Swift NIO](https://github.com/apple/swift-nio) project for the networking foundation
