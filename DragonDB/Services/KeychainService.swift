@@ -14,7 +14,6 @@ import Security
 
 enum KeychainService {
     private static let serviceName = "com.dragondb.connections"
-    private static let accessGroup = "75KGPEX6ZF.com.dragondb.connections"
 
     // Save password to Keychain
     static func savePassword(_ password: String, for connectionId: UUID) throws {
@@ -82,8 +81,7 @@ enum KeychainService {
             kSecAttrService as String: serviceName,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
-            kSecAttrAccessGroup as String: accessGroup
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)
@@ -99,8 +97,7 @@ enum KeychainService {
             kSecAttrService as String: serviceName,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecAttrAccessGroup as String: accessGroup
+            kSecMatchLimit as String: kSecMatchLimitOne
         ]
 
         var result: AnyObject?
@@ -126,8 +123,7 @@ enum KeychainService {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
-            kSecAttrAccount as String: account,
-            kSecAttrAccessGroup as String: accessGroup
+            kSecAttrAccount as String: account
         ]
 
         let status = SecItemDelete(query as CFDictionary)
