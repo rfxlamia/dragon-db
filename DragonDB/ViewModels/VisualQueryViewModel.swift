@@ -101,6 +101,10 @@ final class VisualQueryViewModel {
         mutateAndPublish { $0.setFromTable(rawName) }
     }
 
+    func commitFromTable(_ rawName: String) {
+        mutateAndPublish { $0.commitFromTable(rawName) }
+    }
+
     func setFromTable(name: String, schema: String?) {
         mutateAndPublish { $0.setFromTable(name: name, schema: schema) }
     }

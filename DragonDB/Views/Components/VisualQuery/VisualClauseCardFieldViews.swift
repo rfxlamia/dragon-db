@@ -68,6 +68,7 @@ extension VisualClauseCardView {
                 )
             )
             .textFieldStyle(.roundedBorder)
+            .onSubmit { onCommitFromTable(fromDisplayName) }
             .accessibilityIdentifier(VisualQueryAccessibility.fromTableField)
 
             Button {
