@@ -43,11 +43,11 @@ struct VisualQueryDocumentTests {
         #expect(document.clauseKinds.isEmpty)
     }
 
-    @Test func setFromTableResetsProjectionAndDependentColumns() {
+    @Test func committingADifferentFromTableResetsProjectionAndDependentColumns() {
         var document = VisualQueryDocument()
         #expect(document.chooseStatement(.select) == true)
         #expect(document.addClause(.from) == true)
-        document.setFromTable("orders")
+        document.commitFromTable("orders")
         document.setSelectColumns(["status", "amount"])
         #expect(document.selectProjection == .columns(["status", "amount"]))
         #expect(document.addClause(.where) == true)
@@ -55,12 +55,25 @@ struct VisualQueryDocumentTests {
         #expect(document.addClause(.orderBy) == true)
         document.setOrderBy(column: "amount", direction: .desc)
 
-        document.setFromTable("customers")
+        document.commitFromTable("customers")
 
         #expect(document.selectProjection == .allColumns)
         #expect(document.whereCondition?.column.isEmpty == true)
         #expect(document.orderBy?.column.isEmpty == true)
         #expect(document.fromTable == VisualTableReference(schema: nil, name: "customers"))
+    }
+
+    @Test func pickingADifferentTableFromThePopoverResetsProjection() {
+        var document = VisualQueryDocument()
+        #expect(document.chooseStatement(.select) == true)
+        #expect(document.addClause(.from) == true)
+        document.setFromTable(name: "orders", schema: "public")
+        document.setSelectColumns(["status"])
+
+        document.setFromTable(name: "customers", schema: "public")
+
+        #expect(document.selectProjection == .allColumns)
+        #expect(document.fromTable == VisualTableReference(schema: "public", name: "customers"))
     }
 
     @Test func joinClauseIsRejected() {

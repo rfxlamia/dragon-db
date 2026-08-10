@@ -19,6 +19,11 @@ struct VisualQueryDocument: Equatable, Sendable {
     private(set) var createTableName: String = ""
     private(set) var createColumns: [VisualCreateColumn] = []
 
+    /// Last FROM table the user actually committed (picked from the popover or
+    /// submitted in the field). `fromTable` tracks every keystroke so the preview
+    /// and Run gates stay honest; only a committed change resets column picks.
+    private var committedFromTable: VisualTableReference?
+
     private static let selectClauseOptions: [VisualClauseKind] = [.from, .where, .orderBy, .limit]
 
     // MARK: - Statement & clause lifecycle
@@ -70,6 +75,7 @@ struct VisualQueryDocument: Equatable, Sendable {
             startOver()
         case .from:
             fromTable = nil
+            committedFromTable = nil
             resetProjectionAndDependentColumns()
         case .where:
             whereCondition = nil
@@ -87,6 +93,7 @@ struct VisualQueryDocument: Equatable, Sendable {
         clauseKinds = []
         selectProjection = .allColumns
         fromTable = nil
+        committedFromTable = nil
         whereCondition = nil
         orderBy = nil
         limitInput = .empty
@@ -101,21 +108,23 @@ struct VisualQueryDocument: Equatable, Sendable {
 
     // MARK: - Field mutators
 
+    /// Typed input. Tracks the field character by character without discarding
+    /// the user's column picks — an unfinished edit is not a table change.
     mutating func setFromTable(_ rawName: String) {
-        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let dot = trimmed.firstIndex(of: ".") {
-            let schema = String(trimmed[..<dot])
-            let name = String(trimmed[trimmed.index(after: dot)...])
-            if !schema.isEmpty, !name.isEmpty, !name.contains(".") {
-                applyFromTable(VisualTableReference(schema: schema, name: name))
-                return
-            }
-        }
-        applyFromTable(VisualTableReference(schema: nil, name: trimmed))
+        fromTable = Self.parseTableReference(rawName)
     }
 
+    /// Submitted input (Return in the FROM field). A change of table since the
+    /// last commit resets the projection and dependent column references.
+    mutating func commitFromTable(_ rawName: String) {
+        fromTable = Self.parseTableReference(rawName)
+        commitCurrentFromTable()
+    }
+
+    /// Popover selection. Choosing a table is itself a commit.
     mutating func setFromTable(name: String, schema: String?) {
-        applyFromTable(VisualTableReference(schema: schema, name: name))
+        fromTable = VisualTableReference(schema: schema, name: name)
+        commitCurrentFromTable()
     }
 
     mutating func setSelectColumns(_ columns: [String]) {
@@ -157,12 +166,28 @@ struct VisualQueryDocument: Equatable, Sendable {
 
     // MARK: - Private helpers
 
-    private mutating func applyFromTable(_ table: VisualTableReference) {
-        let previous = fromTable
-        fromTable = table
-        if previous != table {
+    /// Parses `schema.table` when both halves are present; otherwise treats the
+    /// whole string as a bare table name. An empty field means no table at all,
+    /// which is what the column popover and the Run gates both check.
+    private static func parseTableReference(_ rawName: String) -> VisualTableReference? {
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let dot = trimmed.firstIndex(of: ".") {
+            let schema = String(trimmed[..<dot])
+            let name = String(trimmed[trimmed.index(after: dot)...])
+            if !schema.isEmpty, !name.isEmpty, !name.contains(".") {
+                return VisualTableReference(schema: schema, name: name)
+            }
+        }
+        return VisualTableReference(schema: nil, name: trimmed)
+    }
+
+    private mutating func commitCurrentFromTable() {
+        if committedFromTable != fromTable {
             resetProjectionAndDependentColumns()
         }
+        committedFromTable = fromTable
     }
 
     private mutating func resetProjectionAndDependentColumns() {

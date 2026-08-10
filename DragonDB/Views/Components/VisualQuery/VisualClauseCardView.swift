@@ -16,6 +16,7 @@ struct VisualClauseCardView: View {
     let onDelete: () -> Void
     let onSetSelectColumns: ([String]) -> Void
     let onSetFromTable: (String) -> Void
+    let onCommitFromTable: (String) -> Void
     let onSelectFromTable: (VisualTableReference) -> Void
     let onSetWhere: (String, VisualWhereOperator, String?) -> Void
     let onSetOrderBy: (String, VisualOrderDirection) -> Void

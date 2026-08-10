@@ -138,6 +138,7 @@ struct VisualQueryCanvasView: View {
                         },
                         onSetSelectColumns: { viewModel.setSelectColumns($0) },
                         onSetFromTable: { viewModel.setFromTable($0) },
+                        onCommitFromTable: { viewModel.commitFromTable($0) },
                         onSelectFromTable: { table in
                             Self.selectTable(table, using: viewModel)
                         },
