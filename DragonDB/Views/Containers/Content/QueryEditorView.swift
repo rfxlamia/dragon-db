@@ -92,15 +92,13 @@ struct QueryEditorView: View {
         }
         .onChange(of: tabManager.activeTab?.id) { _, _ in
             restoreVisualViewModelIfNeeded()
-            visualColumnNames = []
-            Task {
-                await loadColumnsForCurrentFromTable()
-            }
         }
-        .onChange(of: visualFromTableIdentity) { _, _ in
-            Task {
-                await loadColumnsForCurrentFromTable()
-            }
+        // task(id:) also runs on first appearance, so a restored document that
+        // already names a table still gets its columns. onChange alone never
+        // fired for the initial state.
+        .task(id: visualColumnLoadIdentity) {
+            visualColumnNames = []
+            await loadColumnsForCurrentFromTable()
         }
         .onChange(of: appState.query.queryText) { _, newText in
             viewModel?.handleQueryTextChange(newText)
@@ -142,6 +140,13 @@ struct QueryEditorView: View {
         .sheet(isPresented: $isShowingHistory) {
             QueryHistoryView()
         }
+    }
+
+    /// Identity for the column-loading task. Includes the tab the visual view
+    /// model was built for, so restoring it re-triggers the load even when the
+    /// FROM table is unchanged.
+    private var visualColumnLoadIdentity: String {
+        "\(visualTabId?.uuidString ?? "none")|\(visualFromTableIdentity)"
     }
 
     /// Stable identity for FROM table changes (schema + name) to drive column loading.
